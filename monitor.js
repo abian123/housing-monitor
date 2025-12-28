@@ -114,21 +114,32 @@ async function checkForNewListings() {
     // Navigate through ALL options with keyboard and collect as we go
     console.log('⌨️  Navigating through all options with keyboard...');
     
+    // Click on the search input to focus properly
+    await page.evaluate(() => {
+      const searchInput = document.querySelector('input[type="text"], input[placeholder*="Search"]');
+      if (searchInput) searchInput.focus();
+    });
+    await page.waitForTimeout(500);
+    
     const allListings = new Set();
     let firstText = '';
+    let consecutiveSameCount = 0;
     const maxAttempts = 200;
     
     for (let i = 0; i < maxAttempts; i++) {
-      // Get the currently focused/highlighted option
+      // Press down arrow FIRST to move to next item
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(100);
+      
+      // THEN get the currently focused option
       const currentText = await page.evaluate(() => {
-        // Try multiple ways to find the focused option
+        // Try multiple ways to find the focused/highlighted option
         const selectors = [
           '[role="option"][data-selected="true"]',
           '[role="option"][aria-selected="true"]',
-          '[role="option"].focused',
-          '[role="option"]:focus',
           '[role="option"][class*="selected"]',
-          '[role="option"][class*="active"]'
+          '[role="option"][class*="active"]',
+          '[role="option"][class*="highlight"]'
         ];
         
         for (const selector of selectors) {
@@ -136,9 +147,7 @@ async function checkForNewListings() {
           if (el) return el.textContent.trim();
         }
         
-        // If no focused element, try getting the first option
-        const firstOption = document.querySelector('[role="option"]');
-        return firstOption ? firstOption.textContent.trim() : '';
+        return '';
       });
       
       if (currentText && currentText !== 'Search' && currentText !== 'Select an option' && currentText !== '') {
@@ -148,21 +157,21 @@ async function checkForNewListings() {
           console.log(`  Starting with: "${firstText}"`);
         }
         
-        // If we've looped back to the first item, we're done
-        if (i > 0 && currentText === firstText) {
-          console.log('  ✓ Detected wrap-around to beginning - captured all items!');
-          break;
+        // Check if we've seen this before (but allow seeing the same thing once due to timing)
+        if (allListings.has(currentText)) {
+          consecutiveSameCount++;
+          if (consecutiveSameCount > 2) {
+            console.log('  ✓ Detected wrap-around - captured all items!');
+            break;
+          }
+        } else {
+          consecutiveSameCount = 0;
+          allListings.add(currentText);
         }
-        
-        allListings.add(currentText);
       }
       
-      // Press down arrow to move to next item
-      await page.keyboard.press('ArrowDown');
-      await page.waitForTimeout(80);
-      
       // Log progress every 10 items
-      if (i % 10 === 0 && i > 0) {
+      if (i % 10 === 0 && i > 5) {
         console.log(`  📊 Collected ${allListings.size} unique listings so far...`);
       }
     }

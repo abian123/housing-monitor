@@ -1,0 +1,9 @@
+{
+    "name": "housing-monitor",
+    "version": "1.0.0",
+    "dependencies": {
+      "puppeteer-core": "^19.7.0",
+      "@sparticuz/chromium": "^109.0.0",
+      "nodemailer": "^6.9.0"
+    }
+  }

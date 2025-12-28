@@ -122,16 +122,15 @@ async function checkForNewListings() {
     await page.waitForTimeout(500);
     
     const allListings = new Set();
-    let firstText = '';
     let consecutiveSameCount = 0;
     const maxAttempts = 200;
     
+    // Press down once to get to the first item
+    await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(100);
+    
     for (let i = 0; i < maxAttempts; i++) {
-      // Press down arrow FIRST to move to next item
-      await page.keyboard.press('ArrowDown');
-      await page.waitForTimeout(100);
-      
-      // THEN get the currently focused option
+      // Get the currently focused option
       const currentText = await page.evaluate(() => {
         // Try multiple ways to find the focused/highlighted option
         const selectors = [
@@ -151,13 +150,7 @@ async function checkForNewListings() {
       });
       
       if (currentText && currentText !== 'Search' && currentText !== 'Select an option' && currentText !== '') {
-        // Store the first text we see
-        if (i === 0) {
-          firstText = currentText;
-          console.log(`  Starting with: "${firstText}"`);
-        }
-        
-        // Check if we've seen this before (but allow seeing the same thing once due to timing)
+        // Check if we've seen this before
         if (allListings.has(currentText)) {
           consecutiveSameCount++;
           if (consecutiveSameCount > 2) {
@@ -167,8 +160,17 @@ async function checkForNewListings() {
         } else {
           consecutiveSameCount = 0;
           allListings.add(currentText);
+          
+          // Log first item
+          if (allListings.size === 1) {
+            console.log(`  Starting collection from: "${currentText}"`);
+          }
         }
       }
+      
+      // Press down arrow to move to NEXT item
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(100);
       
       // Log progress every 10 items
       if (i % 10 === 0 && i > 5) {

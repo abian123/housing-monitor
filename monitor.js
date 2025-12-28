@@ -55,9 +55,9 @@ async function sendEmail(newListings) {
   await transporter.sendMail({
     from: EMAIL_USER,
     to: EMAIL_RECIPIENT,
-    subject: '🚨 NEW Affordable Housing Available!',
+    subject: '🚨 NEW Reside Affordable Housing Available!',
     html: `
-      <h2>🏠 New Housing Just Added!</h2>
+      <h2>🏠 New Housing on Reside Just Added!</h2>
       <p><strong>Apply NOW before it fills up:</strong></p>
       <ul>
         ${newListings.map(listing => `<li style="font-size:16px; margin:8px 0;">${listing}</li>`).join('')}

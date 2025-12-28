@@ -111,53 +111,34 @@ async function checkForNewListings() {
     // Wait for dropdown to appear
     await page.waitForTimeout(2000);
 
-    // Scroll within the dropdown to load all options - aggressive approach
-    console.log('📜 Scrolling to load all options...');
-    await page.evaluate(async () => {
-      // Find the scrollable dropdown container
-      const possibleSelectors = [
-        '[role="listbox"]',
-        '[role="menu"]',
-        '.select-list',
-        '[class*="dropdown"]',
-        '[class*="menu"]',
-        '[class*="list"]',
-        'div[style*="overflow"]'
-      ];
-
-      let container = null;
-      for (const selector of possibleSelectors) {
-        const el = document.querySelector(selector);
-        if (el && (el.scrollHeight > el.clientHeight)) {
-          container = el;
-          console.log('Found scrollable container:', selector);
-          break;
-        }
+    // Use keyboard navigation to load ALL options
+    console.log('📜 Loading all options with keyboard navigation...');
+    
+    // Focus on the dropdown/search field
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(500);
+    
+    // Press Down arrow key repeatedly to load all items
+    // This forces lazy-loaded lists to render
+    console.log('⬇️  Pressing down arrow to load items...');
+    for (let i = 0; i < 100; i++) {
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(50); // Small delay between presses
+      
+      // Every 10 presses, check if we've reached the end
+      if (i % 10 === 0) {
+        const optionCount = await page.evaluate(() => {
+          return document.querySelectorAll('[role="option"]').length;
+        });
+        console.log(`  Progress: Found ${optionCount} options so far...`);
       }
+    }
 
-      if (container) {
-        // Scroll incrementally to trigger lazy loading
-        const scrollStep = 100;
-        const maxScrolls = 50;
-        for (let i = 0; i < maxScrolls; i++) {
-          container.scrollTop += scrollStep;
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        // Final scroll to absolute bottom
-        container.scrollTop = container.scrollHeight;
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } else {
-        console.log('No scrollable container found - trying page scroll');
-        // Try scrolling the page itself
-        window.scrollTo(0, document.body.scrollHeight);
-      }
-    });
-
-    // Wait for all options to render after scrolling
-    await page.waitForTimeout(3000);
+    // Wait for final render
+    await page.waitForTimeout(2000);
 
     // Look for dropdown options
-    console.log('🔍 Looking for dropdown options...');
+    console.log('🔍 Collecting all options...');
     const listings = await page.evaluate(() => {
       const options = [];
       

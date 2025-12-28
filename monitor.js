@@ -111,6 +111,29 @@ async function checkForNewListings() {
     // Wait for dropdown to appear
     await page.waitForTimeout(2000);
 
+    // Scroll within the dropdown to load all options
+    console.log('📜 Scrolling to load all options...');
+    await page.evaluate(() => {
+      // Find the scrollable dropdown container
+      const scrollableContainers = [
+        document.querySelector('[role="listbox"]'),
+        document.querySelector('.select-list'),
+        document.querySelector('[class*="dropdown"]'),
+        document.querySelector('[class*="menu"]')
+      ].filter(el => el !== null);
+
+      if (scrollableContainers.length > 0) {
+        const container = scrollableContainers[0];
+        // Scroll to bottom multiple times to ensure all options load
+        for (let i = 0; i < 10; i++) {
+          container.scrollTop = container.scrollHeight;
+        }
+      }
+    });
+
+    // Wait for all options to render after scrolling
+    await page.waitForTimeout(2000);
+
     // Look for dropdown options
     console.log('🔍 Looking for dropdown options...');
     const listings = await page.evaluate(() => {
@@ -167,6 +190,7 @@ async function checkForNewListings() {
     // Compare with what we saw before
     const previousListings = loadPreviousListings();
     const newListings = listings.filter(listing => !previousListings.includes(listing));
+    const removedListings = previousListings.filter(listing => !listings.includes(listing));
 
     if (newListings.length > 0) {
       // NEW LISTINGS FOUND!
@@ -177,6 +201,11 @@ async function checkForNewListings() {
       console.log('📧 Sending email notification...');
       await sendEmail(newListings);
       console.log('✅ Email sent successfully!');
+    } else if (removedListings.length > 0) {
+      // Listings were removed (filled up)
+      console.log('⚠️  Some listings were removed (likely filled):');
+      removedListings.forEach(listing => console.log(`  ❌ ${listing}`));
+      // Don't send email for removals - only for new additions
     } else {
       console.log('✓ No changes - all listings are the same');
     }

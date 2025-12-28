@@ -14,7 +14,7 @@ const fs = require('fs');
 const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/shrPuRidwcYcgg5mU';
 const DATA_FILE = 'housing-data.json';
 
-// Get email settings from GitHub secrets (you'll set these up in GitHub)
+// Get email settings from GitHub secrets
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
 const EMAIL_RECIPIENT = process.env.EMAIL_RECIPIENT;
@@ -111,73 +111,65 @@ async function checkForNewListings() {
     // Wait for dropdown to appear
     await page.waitForTimeout(2000);
 
-    // Use keyboard navigation to load ALL options
-    console.log('📜 Loading all options with keyboard navigation...');
+    // Navigate through ALL options with keyboard and collect as we go
+    console.log('⌨️  Navigating through all options with keyboard...');
     
-    // Focus on the dropdown/search field
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(500);
+    const allListings = new Set();
+    let firstText = '';
+    const maxAttempts = 200;
     
-    // Press Down arrow key repeatedly to load all items
-    // This forces lazy-loaded lists to render
-    console.log('⬇️  Pressing down arrow to load items...');
-    for (let i = 0; i < 100; i++) {
-      await page.keyboard.press('ArrowDown');
-      await page.waitForTimeout(50); // Small delay between presses
+    for (let i = 0; i < maxAttempts; i++) {
+      // Get the currently focused/highlighted option
+      const currentText = await page.evaluate(() => {
+        // Try multiple ways to find the focused option
+        const selectors = [
+          '[role="option"][data-selected="true"]',
+          '[role="option"][aria-selected="true"]',
+          '[role="option"].focused',
+          '[role="option"]:focus',
+          '[role="option"][class*="selected"]',
+          '[role="option"][class*="active"]'
+        ];
+        
+        for (const selector of selectors) {
+          const el = document.querySelector(selector);
+          if (el) return el.textContent.trim();
+        }
+        
+        // If no focused element, try getting the first option
+        const firstOption = document.querySelector('[role="option"]');
+        return firstOption ? firstOption.textContent.trim() : '';
+      });
       
-      // Every 10 presses, check if we've reached the end
-      if (i % 10 === 0) {
-        const optionCount = await page.evaluate(() => {
-          return document.querySelectorAll('[role="option"]').length;
-        });
-        console.log(`  Progress: Found ${optionCount} options so far...`);
+      if (currentText && currentText !== 'Search' && currentText !== 'Select an option' && currentText !== '') {
+        // Store the first text we see
+        if (i === 0) {
+          firstText = currentText;
+          console.log(`  Starting with: "${firstText}"`);
+        }
+        
+        // If we've looped back to the first item, we're done
+        if (i > 0 && currentText === firstText) {
+          console.log('  ✓ Detected wrap-around to beginning - captured all items!');
+          break;
+        }
+        
+        allListings.add(currentText);
+      }
+      
+      // Press down arrow to move to next item
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(80);
+      
+      // Log progress every 10 items
+      if (i % 10 === 0 && i > 0) {
+        console.log(`  📊 Collected ${allListings.size} unique listings so far...`);
       }
     }
 
-    // Wait for final render
-    await page.waitForTimeout(2000);
-
-    // Look for dropdown options
-    console.log('🔍 Collecting all options...');
-    const listings = await page.evaluate(() => {
-      const options = [];
-      
-      // Get ALL text content from the dropdown, not just visible items
-      const selectors = [
-        '[role="option"]',
-        'li[role="option"]',
-        'div[role="option"]',
-        '.select-option',
-        '[data-option]'
-      ];
-
-      for (const selector of selectors) {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length > 0) {
-          console.log(`Found ${elements.length} elements with selector: ${selector}`);
-          elements.forEach(el => {
-            const text = el.textContent.trim();
-            // Skip empty or placeholder options
-            if (text && 
-                text !== '' && 
-                text !== 'Search' &&
-                text !== 'Select an option' && 
-                text !== 'Choose an option') {
-              options.push(text);
-            }
-          });
-          if (options.length > 0) {
-            break;
-          }
-        }
-      }
-
-      console.log(`Total options found: ${options.length}`);
-      // Remove duplicates
-      return [...new Set(options)];
-    });
-
-    console.log(`📊 Found ${listings.length} total listings`);
+    // Convert Set to Array
+    const listings = Array.from(allListings);
+    console.log(`✅ Total unique listings collected: ${listings.length}`);
 
     if (listings.length === 0) {
       console.log('⚠️  Could not find any dropdown options');

@@ -78,10 +78,10 @@ async function checkForNewListings() {
   
   // Open a browser
   const browser = await puppeteer.launch({
-    args: chromium.args,
+    args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
     defaultViewport: chromium.defaultViewport,
     executablePath: await chromium.executablePath,
-    headless: chromium.headless,
+    headless: 'new',
   });
 
   const page = await browser.newPage();
@@ -97,15 +97,33 @@ async function checkForNewListings() {
     // Wait for it to fully load
     await page.waitForTimeout(5000);
 
+    // Click the "+ Add" button to open the dropdown
+    console.log('🖱️  Clicking "+ Add" button...');
+    await page.click('button:has-text("Add"), button[aria-label*="Add"]').catch(() => {
+      // Try alternative selectors if the first one fails
+      return page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const addButton = buttons.find(btn => btn.textContent.includes('Add'));
+        if (addButton) addButton.click();
+      });
+    });
+
+    // Wait for dropdown to appear
+    await page.waitForTimeout(2000);
+
     // Look for dropdown options
     console.log('🔍 Looking for dropdown options...');
     const listings = await page.evaluate(() => {
       const options = [];
       
-      // Try different ways to find the dropdown
+      // Look for the dropdown options that appear after clicking Add
       const selectors = [
-        'select option',
         '[role="option"]',
+        'li[role="option"]',
+        'div[role="option"]',
+        '.select-option',
+        '[data-option]',
+        'select option',
         'select[name*="address"] option',
         'select[name*="location"] option',
         'select[name*="building"] option',
@@ -120,12 +138,16 @@ async function checkForNewListings() {
             // Skip empty or placeholder options
             if (text && 
                 text !== '' && 
+                text !== 'Search' &&
                 text !== 'Select an option' && 
                 text !== 'Choose an option') {
               options.push(text);
             }
           });
-          if (options.length > 0) break;
+          if (options.length > 0) {
+            console.log(`Found options using selector: ${selector}`);
+            break;
+          }
         }
       }
 

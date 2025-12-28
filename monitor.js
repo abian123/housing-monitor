@@ -111,51 +111,69 @@ async function checkForNewListings() {
     // Wait for dropdown to appear
     await page.waitForTimeout(2000);
 
-    // Scroll within the dropdown to load all options
+    // Scroll within the dropdown to load all options - aggressive approach
     console.log('📜 Scrolling to load all options...');
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       // Find the scrollable dropdown container
-      const scrollableContainers = [
-        document.querySelector('[role="listbox"]'),
-        document.querySelector('.select-list'),
-        document.querySelector('[class*="dropdown"]'),
-        document.querySelector('[class*="menu"]')
-      ].filter(el => el !== null);
+      const possibleSelectors = [
+        '[role="listbox"]',
+        '[role="menu"]',
+        '.select-list',
+        '[class*="dropdown"]',
+        '[class*="menu"]',
+        '[class*="list"]',
+        'div[style*="overflow"]'
+      ];
 
-      if (scrollableContainers.length > 0) {
-        const container = scrollableContainers[0];
-        // Scroll to bottom multiple times to ensure all options load
-        for (let i = 0; i < 10; i++) {
-          container.scrollTop = container.scrollHeight;
+      let container = null;
+      for (const selector of possibleSelectors) {
+        const el = document.querySelector(selector);
+        if (el && (el.scrollHeight > el.clientHeight)) {
+          container = el;
+          console.log('Found scrollable container:', selector);
+          break;
         }
+      }
+
+      if (container) {
+        // Scroll incrementally to trigger lazy loading
+        const scrollStep = 100;
+        const maxScrolls = 50;
+        for (let i = 0; i < maxScrolls; i++) {
+          container.scrollTop += scrollStep;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        // Final scroll to absolute bottom
+        container.scrollTop = container.scrollHeight;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } else {
+        console.log('No scrollable container found - trying page scroll');
+        // Try scrolling the page itself
+        window.scrollTo(0, document.body.scrollHeight);
       }
     });
 
     // Wait for all options to render after scrolling
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
     // Look for dropdown options
     console.log('🔍 Looking for dropdown options...');
     const listings = await page.evaluate(() => {
       const options = [];
       
-      // Look for the dropdown options that appear after clicking Add
+      // Get ALL text content from the dropdown, not just visible items
       const selectors = [
         '[role="option"]',
         'li[role="option"]',
         'div[role="option"]',
         '.select-option',
-        '[data-option]',
-        'select option',
-        'select[name*="address"] option',
-        'select[name*="location"] option',
-        'select[name*="building"] option',
-        'select[name*="property"] option'
+        '[data-option]'
       ];
 
       for (const selector of selectors) {
         const elements = document.querySelectorAll(selector);
         if (elements.length > 0) {
+          console.log(`Found ${elements.length} elements with selector: ${selector}`);
           elements.forEach(el => {
             const text = el.textContent.trim();
             // Skip empty or placeholder options
@@ -168,12 +186,12 @@ async function checkForNewListings() {
             }
           });
           if (options.length > 0) {
-            console.log(`Found options using selector: ${selector}`);
             break;
           }
         }
       }
 
+      console.log(`Total options found: ${options.length}`);
       // Remove duplicates
       return [...new Set(options)];
     });

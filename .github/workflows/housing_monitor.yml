@@ -4,7 +4,6 @@
 name: Housing Monitor
 
 on:
-  schedule:
   workflow_dispatch: # Allows manual triggering
 
 jobs:

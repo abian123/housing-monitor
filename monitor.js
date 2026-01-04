@@ -11,7 +11,7 @@ const fs = require('fs');
 // 4. If something is NEW → sends you an email
 // 5. Saves what it saw for next time
 
-const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/shrPuRidwcYcgg5mU';
+const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/pagcVengefPFQvMZC/form';
 const DATA_FILE = 'housing-data.json';
 
 // Get email settings from GitHub secrets
@@ -55,9 +55,9 @@ async function sendEmail(newListings) {
   await transporter.sendMail({
     from: EMAIL_USER,
     to: EMAIL_RECIPIENT,
-    subject: '🚨 NEW Reside Affordable Housing Available!',
+    subject: '🚨 NEW Affordable Housing Available!',
     html: `
-      <h2>🏠 New Housing on Reside Just Added!</h2>
+      <h2>🏠 New Housing Just Added!</h2>
       <p><strong>Apply NOW before it fills up:</strong></p>
       <ul>
         ${newListings.map(listing => `<li style="font-size:16px; margin:8px 0;">${listing}</li>`).join('')}
@@ -97,13 +97,13 @@ async function checkForNewListings() {
     // Wait for it to fully load
     await page.waitForTimeout(5000);
 
-    // Click the "+ Add" button to open the dropdown
-    console.log('🖱️  Clicking "+ Add" button...');
-    await page.click('button:has-text("Add"), button[aria-label*="Add"]').catch(() => {
+    // Click the "+ Add unit" button to open the dropdown
+    console.log('🖱️  Clicking "+ Add unit" button...');
+    await page.click('button:has-text("Add unit"), button:has-text("Add"), button[aria-label*="Add"]').catch(() => {
       // Try alternative selectors if the first one fails
       return page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
-        const addButton = buttons.find(btn => btn.textContent.includes('Add'));
+        const addButton = buttons.find(btn => btn.textContent.includes('Add unit') || btn.textContent.includes('Add'));
         if (addButton) addButton.click();
       });
     });

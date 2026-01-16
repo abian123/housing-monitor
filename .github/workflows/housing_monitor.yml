@@ -4,7 +4,7 @@ name: Housing Monitor
 on:
   workflow_dispatch: # Allows manual triggering
   schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes (add this if you want it to run automatically)
+    - cron: '*/15 * * * *'  # Every 15 minutes
 
 jobs:
   check-listings:
@@ -44,5 +44,6 @@ jobs:
           git add airtable-data.json rockrose-data.json housing-data.json
           if ! git diff --quiet || ! git diff --staged --quiet; then
             git commit -m "Update housing data [skip ci]"
+            git pull --rebase origin master
             git push
           fi

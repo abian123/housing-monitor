@@ -1,10 +1,10 @@
 # .github/workflows/housing-monitor.yml
 # This GitHub Action runs automatically every 15 minutes to check for new listings
-
 name: Housing Monitor
-
 on:
   workflow_dispatch: # Allows manual triggering
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes (add this if you want it to run automatically)
 
 jobs:
   check-listings:
@@ -41,5 +41,17 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add housing-data.json
+          git add airtable-data.json rockrose-data.json housing-data.json
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update housing data [skip ci]" && git push)
+```
+
+**Key changes:**
+1. Added `airtable-data.json` and `rockrose-data.json` to the git add command
+2. Kept `housing-data.json` in case it still exists (for migration)
+3. Added a schedule trigger (commented - you can uncomment if you want it to run automatically every 15 minutes instead of just manually)
+
+**Also create a `.gitignore` file** in your repo root to keep things clean:
+```
+node_modules/
+package-lock.json
+*.png

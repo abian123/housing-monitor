@@ -1,4 +1,4 @@
-// monitor.js - Multi-site version - Checks both Airtable and Rockrose
+// monitor.js - Multi-site version - Checks Airtable, Rockrose, and Housing Partnership
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 const nodemailer = require('nodemailer');
@@ -7,8 +7,10 @@ const fs = require('fs');
 // ===== CONFIGURATION =====
 const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/pagcVengefPFQvMZC/form';
 const ROCKROSE_URL = 'https://rockrose.com/affordable-availabilities/';
+const HOUSING_PARTNERSHIP_URL = 'https://housingpartnership.com/what-we-do/current-vacancies/';
 const AIRTABLE_DATA_FILE = 'airtable-data.json';
 const ROCKROSE_DATA_FILE = 'rockrose-data.json';
+const HOUSING_PARTNERSHIP_DATA_FILE = 'housingpartnership-data.json';
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
@@ -65,7 +67,7 @@ async function sendEmail(subject, newListings, sourceUrl, sourceName) {
   });
 }
 
-// ===== AIRTABLE CHECKER (your original logic) =====
+// ===== AIRTABLE CHECKER =====
 async function checkAirtable(browser) {
   console.log('\n📋 CHECKING AIRTABLE...');
   const page = await browser.newPage();
@@ -168,7 +170,7 @@ async function checkAirtable(browser) {
   }
 }
 
-// ===== ROCKROSE CHECKER (new) =====
+// ===== ROCKROSE CHECKER =====
 async function checkRockrose(browser) {
   console.log('\n🏢 CHECKING ROCKROSE...');
   const page = await browser.newPage();
@@ -183,13 +185,10 @@ async function checkRockrose(browser) {
 
     console.log('🔍 Extracting Rockrose listings...');
     const pageData = await page.evaluate(() => {
-      // Check if the "no availability" message is present
       const noAvailabilityText = 'There is currently no affordable housing availability at this time';
       const bodyText = document.body.textContent;
       const hasNoAvailabilityMessage = bodyText.includes(noAvailabilityText);
       
-      // If listings exist, they would typically be in article/div containers
-      // Look for property cards, listing items, or similar structures
       const potentialSelectors = [
         'article',
         '.property-card',
@@ -204,10 +203,8 @@ async function checkRockrose(browser) {
       for (const selector of potentialSelectors) {
         const elements = document.querySelectorAll(selector);
         if (elements.length > 0) {
-          // Check if these look like actual listing items (not navigation, etc)
           const possibleListings = Array.from(elements).filter(el => {
             const text = el.textContent.trim();
-            // Filter out navigation and small elements
             return text.length > 50 && !text.startsWith('View All') && !text.startsWith('About');
           });
           
@@ -224,7 +221,7 @@ async function checkRockrose(browser) {
         hasNoAvailabilityMessage: hasNoAvailabilityMessage,
         hasListings: items.length > 0,
         listings: items,
-        fullPageText: bodyText.substring(0, 2000) // First 2000 chars for debugging
+        fullPageText: bodyText.substring(0, 2000)
       };
     });
 
@@ -232,14 +229,12 @@ async function checkRockrose(browser) {
     const hadNoListingsBefore = previousListings.length === 0 || 
                                  (previousListings.length === 1 && previousListings[0] === '__NO_AVAILABILITY__');
 
-    // CASE 1: "No availability" message is showing
     if (pageData.hasNoAvailabilityMessage) {
       console.log('ℹ️  Rockrose: No listings available (showing "no availability" message)');
       saveListings(ROCKROSE_DATA_FILE, ['__NO_AVAILABILITY__']);
       return;
     }
 
-    // CASE 2: No availability message is GONE but we found listings with our selectors
     if (pageData.hasListings) {
       const listings = pageData.listings;
       console.log(`✅ Rockrose: ${listings.length} listings found with selectors`);
@@ -266,12 +261,9 @@ async function checkRockrose(browser) {
       return;
     }
 
-    // CASE 3: ⚠️ No availability message is GONE but we couldn't find listings
-    // This is the scenario you're worried about - something changed but our selectors failed
     console.log('⚠️  ROCKROSE PAGE CHANGED! "No availability" message is gone but selectors found nothing');
     console.log('🔍 Page preview:', pageData.fullPageText.substring(0, 500));
     
-    // If we previously had no listings and now the message is gone, ALERT!
     if (hadNoListingsBefore) {
       console.log('🚨 ALERTING: Page structure changed from "no availability" state!');
       
@@ -288,14 +280,95 @@ async function checkRockrose(browser) {
       console.log('✅ Alert email sent!');
     }
     
-    // Save a marker so we know something changed
     saveListings(ROCKROSE_DATA_FILE, ['__PAGE_CHANGED_SELECTORS_FAILED__']);
-
-
 
   } catch (error) {
     console.error('❌ Rockrose Error:', error.message);
     await page.screenshot({ path: 'rockrose-error.png' });
+  } finally {
+    await page.close();
+  }
+}
+
+// ===== HOUSING PARTNERSHIP CHECKER =====
+async function checkHousingPartnership(browser) {
+  console.log('\n🏘️ CHECKING HOUSING PARTNERSHIP...');
+  const page = await browser.newPage();
+
+  try {
+    console.log('📄 Loading Housing Partnership page...');
+    await page.goto(HOUSING_PARTNERSHIP_URL, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    });
+    await page.waitForTimeout(3000);
+
+    const pageData = await page.evaluate(() => {
+      // The page has TWO .posts-container divs:
+      //   [0] = Current Vacancies (empty right now)
+      //   [1] = Listings with no vacancies (has articles)
+      // We only care about the FIRST one.
+      const currentVacanciesContainer = document.querySelectorAll('.posts-container')[0];
+
+      if (!currentVacanciesContainer) {
+        return { error: 'Could not find .posts-container', listings: [] };
+      }
+
+      // Each listing is an <article> element.
+      // When empty, there are zero <article> tags here.
+      const articles = currentVacanciesContainer.querySelectorAll('article');
+
+      const listings = Array.from(articles).map(article => {
+        const title = article.querySelector('.title a')?.textContent?.trim() || '';
+        const address = article.querySelector('.excerpt')?.textContent?.trim() || '';
+        const link = article.querySelector('.title a')?.href || '';
+        const category = article.querySelector('.meta-category a')?.textContent?.trim() || '';
+        return `${title} | ${address} | ${category} | ${link}`;
+      });
+
+      return { listings, error: null };
+    });
+
+    if (pageData.error) {
+      console.error(`⚠️  Housing Partnership: ${pageData.error}`);
+      return;
+    }
+
+    const previousListings = loadPreviousListings(HOUSING_PARTNERSHIP_DATA_FILE);
+    const wasEmpty = previousListings.length === 0 ||
+                     previousListings[0] === '__EMPTY__';
+
+    if (pageData.listings.length === 0) {
+      console.log('ℹ️  Housing Partnership: No current vacancies');
+      saveListings(HOUSING_PARTNERSHIP_DATA_FILE, ['__EMPTY__']);
+      return;
+    }
+
+    // There are listings — find which ones are new
+    const newListings = pageData.listings.filter(l => !previousListings.includes(l));
+
+    if (newListings.length > 0 || wasEmpty) {
+      console.log('🚨 NEW HOUSING PARTNERSHIP LISTINGS!');
+      newListings.forEach(l => console.log(`  ✅ ${l}`));
+
+      await sendEmail(
+        '🚨 NEW Affordable Housing (Housing Partnership)!',
+        newListings.length > 0
+          ? newListings.map(l => l.substring(0, 200))
+          : pageData.listings.map(l => l.substring(0, 200)),
+        HOUSING_PARTNERSHIP_URL,
+        'Housing Partnership'
+      );
+      console.log('✅ Email sent for Housing Partnership!');
+    } else {
+      console.log('✓ No new Housing Partnership listings');
+    }
+
+    saveListings(HOUSING_PARTNERSHIP_DATA_FILE, pageData.listings);
+
+  } catch (error) {
+    console.error('❌ Housing Partnership Error:', error.message);
+    await page.screenshot({ path: 'housingpartnership-error.png' });
   } finally {
     await page.close();
   }
@@ -313,9 +386,9 @@ async function checkAllSites() {
   });
 
   try {
-    // Check both sites
     await checkAirtable(browser);
     await checkRockrose(browser);
+    await checkHousingPartnership(browser);
     
     console.log('\n✅ All checks complete!');
   } catch (error) {

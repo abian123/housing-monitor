@@ -1,4 +1,4 @@
-// monitor.js - Multi-site version - Checks Airtable, Rockrose, and Housing Partnership
+// monitor.js - Multi-site version - Checks Airtable, Rockrose, Housing Partnership, and MGNY
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 const nodemailer = require('nodemailer');
@@ -8,9 +8,11 @@ const fs = require('fs');
 const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/pagcVengefPFQvMZC/form';
 const ROCKROSE_URL = 'https://rockrose.com/affordable-availabilities/';
 const HOUSING_PARTNERSHIP_URL = 'https://housingpartnership.com/what-we-do/current-vacancies/';
+const MGNY_URL = 'https://mgnyconsulting.com/listings/';
 const AIRTABLE_DATA_FILE = 'airtable-data.json';
 const ROCKROSE_DATA_FILE = 'rockrose-data.json';
 const HOUSING_PARTNERSHIP_DATA_FILE = 'housingpartnership-data.json';
+const MGNY_DATA_FILE = 'mgny-data.json';
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
@@ -314,8 +316,6 @@ async function checkHousingPartnership(browser) {
         return { error: 'Could not find .posts-container', listings: [] };
       }
 
-      // Each listing is an <article> element.
-      // When empty, there are zero <article> tags here.
       const articles = currentVacanciesContainer.querySelectorAll('article');
 
       const listings = Array.from(articles).map(article => {
@@ -344,7 +344,6 @@ async function checkHousingPartnership(browser) {
       return;
     }
 
-    // There are listings — find which ones are new
     const newListings = pageData.listings.filter(l => !previousListings.includes(l));
 
     if (newListings.length > 0 || wasEmpty) {
@@ -374,6 +373,74 @@ async function checkHousingPartnership(browser) {
   }
 }
 
+// ===== MGNY CHECKER =====
+async function checkMGNY(browser) {
+  console.log('\n🏙️ CHECKING MGNY...');
+  const page = await browser.newPage();
+
+  try {
+    console.log('📄 Loading MGNY listings page...');
+    await page.goto(MGNY_URL, {
+      waitUntil: 'networkidle2',
+      timeout: 30000
+    });
+
+    await page.waitForSelector('.listings__post-item', { timeout: 15000 }).catch(() => {
+      console.log('  ℹ️  No .listings__post-item found within timeout — may be zero listings');
+    });
+
+    const pageData = await page.evaluate(() => {
+      const items = document.querySelectorAll('.listings__post-item');
+
+      const listings = Array.from(items).map(item => {
+        const title = item.querySelector('.listings__post-item--title')?.textContent?.trim() || '';
+        const address = item.querySelector('.listings__post-item--address')?.textContent?.trim() || '';
+        const price = item.querySelector('.listings__post-item--price')?.textContent?.trim() || '';
+        const units = item.querySelector('.listings__post-item--units')?.textContent?.trim() || '';
+        const link = item.closest('a')?.href || item.querySelector('a')?.href || '';
+        return `${title} | ${address} | ${price} | ${units} | ${link}`;
+      });
+
+      const resultCount = document.querySelector('.listings__header-count')?.textContent?.trim() || '';
+
+      return { listings, resultCount };
+    });
+
+    console.log(`✅ MGNY: ${pageData.resultCount} — ${pageData.listings.length} listings parsed`);
+
+    const previousListings = loadPreviousListings(MGNY_DATA_FILE);
+    const newListings = pageData.listings.filter(l => !previousListings.includes(l));
+
+    const removedListings = previousListings.filter(l => !pageData.listings.includes(l));
+    if (removedListings.length > 0) {
+      console.log(`  ℹ️  ${removedListings.length} listing(s) no longer present`);
+    }
+
+    if (newListings.length > 0) {
+      console.log('🚨 NEW MGNY LISTINGS!');
+      newListings.forEach(l => console.log(`  ✅ ${l}`));
+
+      await sendEmail(
+        '🚨 NEW Affordable Housing (MGNY)!',
+        newListings.map(l => l.substring(0, 200)),
+        MGNY_URL,
+        'MGNY Consulting'
+      );
+      console.log('✅ Email sent for MGNY!');
+    } else {
+      console.log('✓ No new MGNY listings');
+    }
+
+    saveListings(MGNY_DATA_FILE, pageData.listings);
+
+  } catch (error) {
+    console.error('❌ MGNY Error:', error.message);
+    await page.screenshot({ path: 'mgny-error.png' });
+  } finally {
+    await page.close();
+  }
+}
+
 // ===== MAIN FUNCTION =====
 async function checkAllSites() {
   console.log(`⏰ Starting checks at ${new Date().toLocaleString()}...`);
@@ -389,6 +456,7 @@ async function checkAllSites() {
     await checkAirtable(browser);
     await checkRockrose(browser);
     await checkHousingPartnership(browser);
+    await checkMGNY(browser);
     
     console.log('\n✅ All checks complete!');
   } catch (error) {

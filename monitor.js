@@ -54,7 +54,7 @@ async function sendEmail(subject, newListings, sourceUrl, sourceName) {
     to: EMAIL_RECIPIENT,
     subject: subject,
     html: `
-      <h2>🏠 New Housing at ${sourceName}!</h2>
+      <h2>🏠 ${sourceName} - New Affordable Rerental!</h2>
       <p><strong>Apply NOW before it fills up:</strong></p>
       <ul>
         ${newListings.map(listing => `<li style="font-size:16px; margin:8px 0;">${listing}</li>`).join('')}
@@ -152,10 +152,10 @@ async function checkAirtable(browser) {
       newListings.forEach(listing => console.log(`  ✅ ${listing}`));
       
       await sendEmail(
-        '🚨 NEW Affordable Housing (Airtable)!',
+        '🚨 RESIDE - NEW RERENTAL!',
         newListings,
         AIRTABLE_URL,
-        'Airtable Form'
+        'Reside'
       );
       console.log('✅ Email sent for Airtable!');
     } else {
@@ -249,7 +249,7 @@ async function checkRockrose(browser) {
         newListings.forEach(listing => console.log(`  ✅ ${listing.substring(0, 100)}...`));
         
         await sendEmail(
-          '🚨 NEW Affordable Housing (Rockrose)!',
+          '🚨 (ROCKROSE) - NEW RERENTAL!',
           newListings.length > 0 ? newListings.map(l => l.substring(0, 200)) : ['Listings detected! Check the site now.'],
           ROCKROSE_URL,
           'Rockrose'
@@ -351,7 +351,7 @@ async function checkHousingPartnership(browser) {
       newListings.forEach(l => console.log(`  ✅ ${l}`));
 
       await sendEmail(
-        '🚨 NEW Affordable Housing (Housing Partnership)!',
+        '🚨 (Housing Partnership) - NEW RERENTAL!',
         newListings.length > 0
           ? newListings.map(l => l.substring(0, 200))
           : pageData.listings.map(l => l.substring(0, 200)),
@@ -421,10 +421,10 @@ async function checkMGNY(browser) {
       newListings.forEach(l => console.log(`  ✅ ${l}`));
 
       await sendEmail(
-        '🚨 NEW Affordable Housing (MGNY)!',
+        '🚨 (MGNY) - NEW RERENTAL!',
         newListings.map(l => l.substring(0, 200)),
         MGNY_URL,
-        'MGNY Consulting'
+        'MGNY'
       );
       console.log('✅ Email sent for MGNY!');
     } else {

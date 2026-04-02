@@ -190,37 +190,18 @@ async function checkRockrose(browser) {
       const noAvailabilityText = 'There is currently no affordable housing availability at this time';
       const bodyText = document.body.textContent;
       const hasNoAvailabilityMessage = bodyText.includes(noAvailabilityText);
-      
-      const potentialSelectors = [
-        'article',
-        '.property-card',
-        '.listing-item',
-        '.availability-item',
-        '[class*="property"]',
-        '[class*="listing"]',
-        '[class*="unit"]'
-      ];
-      
-      let items = [];
-      for (const selector of potentialSelectors) {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length > 0) {
-          const possibleListings = Array.from(elements).filter(el => {
-            const text = el.textContent.trim();
-            return text.length > 50 && !text.startsWith('View All') && !text.startsWith('About');
-          });
-          
-          if (possibleListings.length > 0) {
-            items = possibleListings.map(el => {
-              return el.textContent.trim().replace(/\s+/g, ' ');
-            });
-            break;
-          }
-        }
-      }
-      
+
+      const cards = Array.from(document.querySelectorAll('article.affordable-card'));
+      const items = cards.map(article => {
+        const address = article.querySelector('h2.address-wrapper')?.textContent?.trim() || '';
+        const unit = article.querySelector('span.address-wrapper')?.textContent?.trim() || '';
+        const details = Array.from(article.querySelectorAll('ul li')).map(li => li.textContent.trim()).join(', ');
+        const link = article.querySelector('a')?.href || '';
+        return `${address} ${unit} | ${details} | ${link}`;
+      }).filter(text => text.length > 5);
+
       return {
-        hasNoAvailabilityMessage: hasNoAvailabilityMessage,
+        hasNoAvailabilityMessage,
         hasListings: items.length > 0,
         listings: items,
         fullPageText: bodyText.substring(0, 2000)
@@ -239,7 +220,7 @@ async function checkRockrose(browser) {
 
     if (pageData.hasListings) {
       const listings = pageData.listings;
-      console.log(`✅ Rockrose: ${listings.length} listings found with selectors`);
+      console.log(`✅ Rockrose: ${listings.length} listings found`);
       console.log('Sample:', listings[0]?.substring(0, 100) || 'N/A');
 
       const newListings = listings.filter(listing => !previousListings.includes(listing));

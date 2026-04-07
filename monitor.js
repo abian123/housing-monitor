@@ -7,7 +7,7 @@ const fs = require('fs');
 // ===== CONFIGURATION =====
 const AIRTABLE_URL = 'https://airtable.com/appsseXTOVx59HC0W/pagcVengefPFQvMZC/form';
 const ROCKROSE_URL = 'https://rockrose.com/affordable-availabilities/';
-const HOUSING_PARTNERSHIP_URL = 'https://housingpartnership.com/what-we-do/current-vacancies/';
+const HOUSING_PARTNERSHIP_URL = 'https://housingpartnership.com/services/current-vacancies';
 const MGNY_URL = 'https://mgnyconsulting.com/listings/';
 const AIRTABLE_DATA_FILE = 'airtable-data.json';
 const ROCKROSE_DATA_FILE = 'rockrose-data.json';
@@ -287,25 +287,30 @@ async function checkHousingPartnership(browser) {
     await page.waitForTimeout(3000);
 
     const pageData = await page.evaluate(() => {
-      // The page has TWO .posts-container divs:
-      //   [0] = Current Vacancies (empty right now)
-      //   [1] = Listings with no vacancies (has articles)
-      // We only care about the FIRST one.
-      const currentVacanciesContainer = document.querySelectorAll('.posts-container')[0];
+      // New site structure: listing cards are <a> tags with class "group relative flex flex-col..."
+      // under a <section> containing an <h2> "Active Listings"
+      
+      // Find the Active Listings section
+      let activeSection = null;
+      document.querySelectorAll('h2').forEach(h2 => {
+        if (h2.textContent.trim() === 'Active Listings') {
+          activeSection = h2.closest('section');
+        }
+      });
 
-      if (!currentVacanciesContainer) {
-        return { error: 'Could not find .posts-container', listings: [] };
+      if (!activeSection) {
+        return { error: 'Could not find Active Listings section', listings: [] };
       }
 
-      const articles = currentVacanciesContainer.querySelectorAll('article');
+      // Each listing is an <a> card inside the grid
+      const cards = activeSection.querySelectorAll('a[href*="current-vacancies"]');
 
-      const listings = Array.from(articles).map(article => {
-        const title = article.querySelector('.title a')?.textContent?.trim() || '';
-        const address = article.querySelector('.excerpt')?.textContent?.trim() || '';
-        const link = article.querySelector('.title a')?.href || '';
-        const category = article.querySelector('.meta-category a')?.textContent?.trim() || '';
-        return `${title} | ${address} | ${category} | ${link}`;
-      });
+      const listings = Array.from(cards).map(card => {
+        const title = card.querySelector('h3')?.textContent?.trim() || '';
+        const address = card.querySelector('span.text-sm')?.textContent?.trim() || '';
+        const link = card.href || '';
+        return `${title} | ${address} | ${link}`;
+      }).filter(l => l.length > 5);
 
       return { listings, error: null };
     });
@@ -324,6 +329,9 @@ async function checkHousingPartnership(browser) {
       saveListings(HOUSING_PARTNERSHIP_DATA_FILE, ['__EMPTY__']);
       return;
     }
+
+    console.log(`✅ Housing Partnership: ${pageData.listings.length} listing(s) found`);
+    pageData.listings.forEach(l => console.log(`  • ${l.substring(0, 100)}`));
 
     const newListings = pageData.listings.filter(l => !previousListings.includes(l));
 

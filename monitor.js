@@ -68,7 +68,7 @@ async function sendEmail(subject, newListings, sourceUrl, sourceName) {
     `
   });
 }
-
+/*
 // ===== AIRTABLE CHECKER =====
 async function checkAirtable(browser) {
   console.log('\n📋 CHECKING AIRTABLE...');
@@ -171,7 +171,7 @@ async function checkAirtable(browser) {
     await page.close();
   }
 }
-
+*/
 // ===== ROCKROSE CHECKER =====
 async function checkRockrose(browser) {
   console.log('\n🏢 CHECKING ROCKROSE...');

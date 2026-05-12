@@ -442,7 +442,7 @@ async function checkAllSites() {
   });
 
   try {
-    await checkAirtable(browser);
+    //await checkAirtable(browser);
     await checkRockrose(browser);
     await checkHousingPartnership(browser);
     await checkMGNY(browser);
